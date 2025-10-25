@@ -43,17 +43,21 @@ EXCLUDED_PROCESSES = (
     "Microsoft.ServiceHub.Controller.exe"  # VS background service
 )
 
-def log_below_limit(progs, lower_limit=3):
-    now = datetime.now()
+def ensure_logs_folder():
     folder_path = Path(__file__).parent / "logs"
     folder_path.mkdir(parents=True, exist_ok=True)
+    return folder_path
+
+def log_below_limit(progs, lower_limit=3):
+    now = datetime.now()
+    folder_path = ensure_logs_folder()
 
     filename = datetime.now().strftime("%Y-%m-%d") + ".txt"
     file_path = folder_path / filename
     file_path.touch(exist_ok=True)
     current_pid = os.getpid()
 
-    with open(file_path, 'a') as f:
+    with open(file_path, 'a', encoding='utf-8') as f:
         for proc in progs:
             if 0 < proc.cpu_use < lower_limit:
                 try:
@@ -61,13 +65,15 @@ def log_below_limit(progs, lower_limit=3):
                         continue
                     elif proc.name in EXCLUDED_PROCESSES:
                         continue
-                
-                    f.write(f"{proc.name} cpu use: {proc.cpu_use:.1f}%\n")
+
+                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    f.write(f"{now_str} | {proc.name} (PID {proc.pid}) CPU use: {proc.cpu_use:.1f}% < {lower_limit}%\n")
                     print(f"Logged {proc.name} (PID {proc.pid}) using {proc.cpu_use}% < {lower_limit}%")
+
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     print(f"Could not access {proc.name} (PID {proc.pid})")
-        f.write("-"*40+"\n")
-
+        f.write("-" * 60 + "\n")
 
 while True:
     processes = {p.info['pid']: p for p in psutil.process_iter(['pid', 'name'])}

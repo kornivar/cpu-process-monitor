@@ -1,0 +1,96 @@
+import os
+import psutil
+import time
+from pathlib import Path
+from datetime import datetime
+
+class My_Processes:
+    def __init__(self, pid, name, cpu_use):
+        self.__pid = pid
+        self.__name = name
+        self.__cpu_use = cpu_use
+
+    @property
+    def pid(self):
+        return self.__pid
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def cpu_use(self):
+        return self.__cpu_use
+
+EXCLUDED_PROCESSES = (
+    # System processes
+    "System Idle Process",  # Windows idle process
+    "System",               # Windows kernel process
+    "explorer.exe",         # Windows shell
+    "svchost.exe",          # Windows service host
+    "winlogon.exe",         # Windows login process
+    "taskhostw.exe",        # Windows task host
+    "Registry",             # Windows registry process
+    
+    # Popular applications
+    "chrome.exe",           # Browser
+    "firefox.exe",          # Browser
+    "edge.exe",             # Browser
+    "Teams.exe",            # Communication tool
+    "python.exe",           # To avoid logging the monitor itself
+    "devenv.exe",           # Visual Studio
+    "node.exe",             # Node.js runtime
+    "Microsoft.ServiceHub.Controller.exe"  # VS background service
+)
+
+def log_below_limit(progs, lower_limit=3):
+    now = datetime.now()
+    folder_path = Path(__file__).parent / "logs"
+    folder_path.mkdir(parents=True, exist_ok=True)
+
+    filename = datetime.now().strftime("%Y-%m-%d") + ".txt"
+    file_path = folder_path / filename
+    file_path.touch(exist_ok=True)
+    current_pid = os.getpid()
+
+    with open(file_path, 'a') as f:
+        for proc in progs:
+            if 0 < proc.cpu_use < lower_limit:
+                try:
+                    if proc.pid == current_pid:
+                        continue
+                    elif proc.name in EXCLUDED_PROCESSES:
+                        continue
+                
+                    f.write(f"{proc.name} cpu use: {proc.cpu_use:.1f}%\n")
+                    print(f"Logged {proc.name} (PID {proc.pid}) using {proc.cpu_use}% < {lower_limit}%")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    print(f"Could not access {proc.name} (PID {proc.pid})")
+        f.write("-"*40+"\n")
+
+
+while True:
+    processes = {p.info['pid']: p for p in psutil.process_iter(['pid', 'name'])}
+
+
+    for p in processes.values():
+        try:
+            p.cpu_percent(interval=None)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+    time.sleep(5)  
+
+
+    progs = []
+    for pid, p in processes.items():
+        try:
+            cpu = p.cpu_percent(interval=None) 
+            progs.append(My_Processes(pid, p.info['name'], cpu))
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+    progs.sort(key=lambda x: x.cpu_use)
+    log_below_limit(progs)
+    print("Cycle completed!")
+    time.sleep(2)

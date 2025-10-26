@@ -75,28 +75,51 @@ def log_below_limit(progs, lower_limit=3):
                     print(f"Could not access {proc.name} (PID {proc.pid})")
         f.write("-" * 60 + "\n")
 
-while True:
+def build_processes_snapshot():
     processes = {p.info['pid']: p for p in psutil.process_iter(['pid', 'name'])}
-
-
     for p in processes.values():
         try:
             p.cpu_percent(interval=None)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
+    return processes
 
-    time.sleep(5)  
+def main():
+    print("Process monitor starting...")
+    print("Choose a mode:")
+    print("  l - log processes with CPU usage below 3% (single pass)")
+    print("  d - start spike diagnostic (continuous, 10 seconds)")
+    print("  q - quit")
 
+    while True:
+        choice = input("Enter (l/d/q): ").strip().lower()
+        if choice == 'q':
+            print("Exiting...")
+            break
+        elif choice == 'l':
+            processes = build_processes_snapshot()
 
-    progs = []
-    for pid, p in processes.items():
-        try:
-            cpu = p.cpu_percent(interval=None) 
-            progs.append(My_Processes(pid, p.info['name'], cpu))
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            time.sleep(1.5)
+
+            progs = []
+            for pid, p in processes.items():
+                try:
+                    cpu = p.cpu_percent(interval=None)
+                    progs.append(My_Processes(pid, p.info['name'], cpu))
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+
+            progs.sort(key=lambda x: x.cpu_use)
+            log_below_limit(progs)
+            print("Logging complete!")
+
+        elif choice == 'd':
+            print("This feature is not available yet.")
             pass
 
-    progs.sort(key=lambda x: x.cpu_use)
-    log_below_limit(progs)
-    print("Cycle completed!")
-    time.sleep(2)
+        else: 
+            print("Invalid input. Please try again.")
+
+if __name__ == "__main__":
+    main()
+
